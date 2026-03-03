@@ -88,6 +88,27 @@ chdir_hydra_root()
             r"\[JOB\] on_job_start task_function: <function my_app at 0x[0-9a-fA-F]+>",
             id="on_job_start_task_function",
         ),
+        param(
+            "tests/test_apps/app_with_callbacks/app_with_log_compose_callback/my_app.py",
+            ["age=10"],
+            dedent(
+                """\
+                [HYDRA] ====
+                Composed config .*tests.test_apps.app_with_callbacks.app_with_log_compose_callback.config
+                age: 10
+                name: James Bond
+                group:
+                  name: a
+
+                ----
+                Includes overrides \\[.*'age=10'.*\\]
+                Used defaults \\['config_schema', 'config', 'group/a'\\]
+                ====
+                job_name: test, name: James Bond, age: 10, group: a
+                """
+            ),
+            id="on_compose_callback",
+        ),
     ],
 )
 def test_app_with_callbacks(
@@ -98,7 +119,7 @@ def test_app_with_callbacks(
 ) -> None:
     cmd = [
         app_path,
-        "hydra.run.dir=" + str(tmpdir),
+        f'hydra.run.dir="{str(tmpdir)}"',
         "hydra.job.chdir=True",
         "hydra.hydra_logging.formatters.simple.format='[HYDRA] %(message)s'",
         "hydra.job_logging.formatters.simple.format='[JOB] %(message)s'",
@@ -120,7 +141,7 @@ def test_experimental_save_job_info_callback(tmpdir: Path, multirun: bool) -> No
 
     cmd = [
         app_path,
-        "hydra.run.dir=" + str(tmpdir),
+        f'hydra.run.dir="{str(tmpdir)}"',
         "hydra.sweep.dir=" + str(tmpdir),
         "hydra.job.chdir=True",
     ]
@@ -167,7 +188,7 @@ def test_save_job_return_callback(tmpdir: Path, multirun: bool) -> None:
     cmd = [
         sys.executable,
         app_path,
-        "hydra.run.dir=" + str(tmpdir),
+        f'hydra.run.dir="{str(tmpdir)}"',
         "hydra.sweep.dir=" + str(tmpdir),
         "hydra.job.chdir=True",
     ]
@@ -202,7 +223,7 @@ def test_experimental_rerun(
 
     cmd = [
         app_path,
-        "hydra.run.dir=" + str(tmpdir),
+        f'hydra.run.dir="{str(tmpdir)}"',
         "hydra.sweep.dir=" + str(tmpdir),
         "hydra.job.chdir=False",
         "hydra.hydra_logging.formatters.simple.format='[HYDRA] %(message)s'",

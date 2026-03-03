@@ -23,7 +23,11 @@ from hydra._internal.config_search_path_impl import ConfigSearchPathImpl
 from hydra.core.config_search_path import SearchPathQuery
 from hydra.core.config_store import ConfigStore
 from hydra.core.global_hydra import GlobalHydra
-from hydra.errors import ConfigCompositionException, HydraException
+from hydra.errors import (
+    ConfigCompositionException,
+    HydraException,
+    OverrideParseException,
+)
 from hydra.test_utils.test_utils import chdir_hydra_root
 
 chdir_hydra_root()
@@ -362,14 +366,20 @@ def test_missing_init_py_error(hydra_restore_singletons: Any) -> None:
 
 
 def test_missing_bad_config_dir_error(hydra_restore_singletons: Any) -> None:
+    # Use a platform-appropriate absolute path that doesn't exist
+    if sys.platform == "win32":
+        bad_dir = "C:\\no_way_in_hell_1234567890"
+    else:
+        bad_dir = "/no_way_in_hell_1234567890"
+
     expected = (
         "Primary config directory not found."
-        "\nCheck that the config directory '/no_way_in_hell_1234567890' exists and readable"
+        f"\nCheck that the config directory '{bad_dir}' exists and readable"
     )
 
     with raises(Exception, match=re.escape(expected)):
         with initialize_config_dir(
-            config_dir="/no_way_in_hell_1234567890",
+            config_dir=bad_dir,
             version_base=None,
         ):
             hydra = GlobalHydra.instance().hydra
@@ -418,6 +428,49 @@ def test_adding_to_sc_dict(
     @dataclass
     class Config:
         map: Dict[str, str] = field(default_factory=dict)
+
+    ConfigStore.instance().store(name="config", node=Config)
+
+    if isinstance(expected, dict):
+        cfg = compose(config_name="config", overrides=overrides)
+        assert cfg == expected
+    else:
+        with expected:
+            compose(config_name="config", overrides=overrides)
+
+
+@mark.usefixtures("initialize_hydra_no_path")
+@mark.parametrize(
+    ("overrides", "expected"),
+    [
+        param(
+            ["list_key=extend_list(d, e)"],
+            {"list_key": ["a", "b", "c", "d", "e"]},
+            id="extend_list_with_str",
+        ),
+        param(
+            ["list_key=extend_list([d1, d2])"],
+            {"list_key": ["a", "b", "c", ["d1", "d2"]]},
+            id="extend_list_with_list",
+        ),
+        param(
+            ["list_key=extend_list(d, [e1])", "list_key=extend_list(f)"],
+            {"list_key": ["a", "b", "c", "d", ["e1"], "f"]},
+            id="extend_list_twice",
+        ),
+        param(
+            ["+list_key=extend_list([d1, d2])"],
+            raises(OverrideParseException),
+            id="extend_list_with_append_key",
+        ),
+    ],
+)
+def test_extending_list(
+    hydra_restore_singletons: Any, overrides: List[str], expected: Any
+) -> None:
+    @dataclass
+    class Config:
+        list_key: Any = field(default_factory=lambda: ["a", "b", "c"])
 
     ConfigStore.instance().store(name="config", node=Config)
 

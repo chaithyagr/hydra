@@ -2,6 +2,7 @@
 
 import copy
 import functools
+import os
 from enum import Enum
 from textwrap import dedent
 from typing import Any, Callable, Dict, List, Sequence, Tuple, Union
@@ -12,6 +13,52 @@ from omegaconf._utils import is_structured_config
 from hydra._internal.utils import _locate
 from hydra.errors import InstantiationException
 from hydra.types import ConvertMode, TargetConf
+
+DEFAULT_BLOCKLISTED_MODULES = {
+    "builtins.exec",
+    "builtins.eval",
+    "builtins.__import__",
+    "builtins.exit",
+    "builtins.quit",
+    "os.environ.OMP_NUM_THREADS",
+    "os.kill",
+    "os.system",
+    "os.putenv",
+    "os.remove",
+    "os.removedirs",
+    "os.rmdir",
+    "os.fchdir",
+    "os.setuid",
+    "os.fork",
+    "os.forkpty",
+    "os.killpg",
+    "os.rename",
+    "os.renames",
+    "os.truncate",
+    "os.replace",
+    "os.unlink",
+    "os.fchmod",
+    "os.fchown",
+    "os.chmod",
+    "os.chown",
+    "os.chroot",
+    "os.fchdir",
+    "os.lchflags",
+    "os.lchmod",
+    "os.lchown",
+    "os.getcwd",
+    "os.chdir",
+    "shutil.rmtree",
+    "shutil.move",
+    "shutil.chown",
+    "subprocess.Popen",
+    "builtins.help",
+    "sys.modules.ipdb",
+    "sys.modules.joblib",
+    "sys.modules.resource",
+    "sys.modules.psutil",
+    "sys.modules.tkinter",
+}
 
 
 class _Keys(str, Enum):
@@ -130,6 +177,19 @@ def _resolve_target(
 ) -> Union[type, Callable[..., Any]]:
     """Resolve target string, type or callable into type or callable."""
     if isinstance(target, str):
+        if target in DEFAULT_BLOCKLISTED_MODULES:
+            allowlist = os.environ.get("HYDRA_INSTANTIATE_ALLOWLIST_OVERRIDE", "")
+            if target not in allowlist.split(":"):
+                msg = dedent(
+                    f"""\
+                    Target '{target}' is blocklisted and cannot be instantiated from config
+                    to prevent security vulnerabilities, set env var
+                    HYDRA_INSTANTIATE_ALLOWLIST_OVERRIDE={target}:<other allowlisted targets> to bypass"""
+                )
+                if full_key:
+                    msg += f"\nfull_key: {full_key}"
+                raise InstantiationException(msg)
+
         try:
             target = _locate(target)
         except Exception as e:
@@ -145,11 +205,45 @@ def _resolve_target(
     return target
 
 
-def instantiate(config: Any, *args: Any, **kwargs: Any) -> Any:
+def _deep_copy_full_config(subconfig: Any) -> Any:
+    """Deep copy full config from root to leaf and return the copied subconfig"""
+    if not OmegaConf.is_config(subconfig):
+        return copy.deepcopy(subconfig)
+
+    full_key = subconfig._get_full_key(None)
+    if full_key == "" or full_key is None:  # Do not exit early if full_key is 0
+        return copy.deepcopy(subconfig)
+    full_key = str(full_key)
+
+    if OmegaConf.is_list(subconfig._get_parent()):
+        # OmegaConf has a bug where _get_full_key doesn't add [] if the parent
+        # is a list, eg. instead of foo[0], it'll return foo0
+        index = subconfig._key()
+        full_key = full_key[: -len(str(index))] + f"[{index}]"
+    root = subconfig._get_root()
+    full_key = full_key.replace(root._get_full_key(None) or "", "", 1)
+    if OmegaConf.select(root, full_key) is not subconfig:
+        # The parent chain and full key are not consistent so don't
+        # try to copy the full config
+        return copy.deepcopy(subconfig)
+
+    full_config_copy = copy.deepcopy(root)
+    return OmegaConf.select(full_config_copy, full_key)
+
+
+def instantiate(
+    config: Any,
+    *args: Any,
+    _skip_instantiate_full_deepcopy_: bool = False,
+    **kwargs: Any,
+) -> Any:
     """
     :param config: An config object describing what to call and what params to use.
                    In addition to the parameters, the config must contain:
                    _target_ : target class or callable name (str)
+                              IMPORTANT: This may pose a security risk since the config
+                              can be used to execute arbitrary code. Make sure to use this only
+                              with trusted configs or configure the allowlist/blocklist.
                    And may contain:
                    _args_: List-like of positional arguments to pass to the target
                    _recursive_: Construct nested objects as well (bool).
@@ -168,6 +262,10 @@ def instantiate(config: Any, *args: Any, **kwargs: Any) -> Any:
                                   are converted to dicts / lists too.
                    _partial_: If True, return functools.partial wrapped method or object
                               False by default. Configure per target.
+    :param _skip_instantiate_full_deepcopy_: If True, deep copy just the input config instead
+                    of full config before resolving omegaconf interpolations, which may
+                    potentially modify the config's parent/sibling configs in place.
+                    False by default.
     :param args: Optional positional parameters pass-through
     :param kwargs: Optional named parameters to override
                    parameters in the config object. Parameters not present
@@ -207,11 +305,15 @@ def instantiate(config: Any, *args: Any, **kwargs: Any) -> Any:
 
     if OmegaConf.is_dict(config):
         # Finalize config (convert targets to strings, merge with kwargs)
-        config_copy = copy.deepcopy(config)
+        # Create copy to avoid mutating original
+        if _skip_instantiate_full_deepcopy_:
+            config_copy = copy.deepcopy(config)
+            config_copy._set_parent(config._get_parent())
+        else:
+            config_copy = _deep_copy_full_config(config)
         config_copy._set_flag(
             flags=["allow_objects", "struct", "readonly"], values=[True, False, False]
         )
-        config_copy._set_parent(config._get_parent())
         config = config_copy
 
         if kwargs:
@@ -228,11 +330,15 @@ def instantiate(config: Any, *args: Any, **kwargs: Any) -> Any:
         )
     elif OmegaConf.is_list(config):
         # Finalize config (convert targets to strings, merge with kwargs)
-        config_copy = copy.deepcopy(config)
+        # Create copy to avoid mutating original
+        if _skip_instantiate_full_deepcopy_:
+            config_copy = copy.deepcopy(config)
+            config_copy._set_parent(config._get_parent())
+        else:
+            config_copy = _deep_copy_full_config(config)
         config_copy._set_flag(
             flags=["allow_objects", "struct", "readonly"], values=[True, False, False]
         )
-        config_copy._set_parent(config._get_parent())
         config = config_copy
 
         OmegaConf.resolve(config)

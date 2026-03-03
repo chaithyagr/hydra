@@ -1,6 +1,6 @@
 -r requirements.txt
 bandit
-black==24.2.0
+black==24.3.0
 build
 coverage
 flake8==6.0.0
@@ -10,11 +10,11 @@ mypy==1.8.0
 nox
 packaging
 pre-commit
-pytest
+pytest==8.3.5
 pytest-benchmark
-pytest-snail
 read-version
 setuptools
 towncrier
 twine
+types-setuptools
 yamllint

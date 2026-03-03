@@ -80,7 +80,7 @@ class OverridesParser:
 
     def parse_overrides(self, overrides: List[str]) -> List[Override]:
         ret: List[Override] = []
-        for override in overrides:
+        for idx, override in enumerate(overrides):
             try:
                 parsed = self.parse_rule(override, "override")
             except HydraException as e:
@@ -98,7 +98,8 @@ class OverridesParser:
                     msg = f"Error parsing override '{override}'" f"\n{e}"
                 raise OverrideParseException(
                     override=override,
-                    message=f"{msg}"
+                    message=f"Error when parsing index: {idx}, string: {override} out of {overrides}."
+                    f"\n{msg}"
                     f"\nSee https://hydra.cc/docs/1.2/advanced/override_grammar/basic for details",
                 ) from e.__cause__
             assert isinstance(parsed, Override)
@@ -114,6 +115,7 @@ def create_functions() -> Functions:
     functions.register(name="str", func=grammar_functions.cast_str)
     functions.register(name="bool", func=grammar_functions.cast_bool)
     functions.register(name="float", func=grammar_functions.cast_float)
+    functions.register(name="json_str", func=grammar_functions.cast_json_str)
     # sweeps
     functions.register(name="choice", func=grammar_functions.choice)
     functions.register(name="range", func=grammar_functions.range)
@@ -123,4 +125,5 @@ def create_functions() -> Functions:
     functions.register(name="sort", func=grammar_functions.sort)
     functions.register(name="shuffle", func=grammar_functions.shuffle)
     functions.register(name="glob", func=grammar_functions.glob)
+    functions.register(name="extend_list", func=grammar_functions.extend_list)
     return functions

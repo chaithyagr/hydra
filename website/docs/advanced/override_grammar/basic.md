@@ -212,7 +212,7 @@ $ python my_app.py 'dir=A\[B'   # ok
 - `float`: 3.14, -10e6, inf, -inf, nan.
 - `bool`: true, false
 - `dot_path`: foo.bar
-- `interpolation`: ${foo.bar}, ${oc.env:USER,me}
+- `interpolation`: $\{foo.bar}, $\{oc.env:USER,me}
 
 Constants (null, true, false, inf, nan) are case-insensitive.
 
@@ -235,6 +235,8 @@ $ python my_app.py 'dir="${get_dir: {root: /root, name: ${name}}}"'
 foo=[1,2,3]
 nested=[a,[b,[c]]]
 ```
+
+Lists are assigned, not merged. To extend an existing list, use the [`extend_list` function](extended.md#extending-lists).
 
 ### Dictionaries
 ```python

@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+const {fbContent} = require('docusaurus-plugin-internaldocs-fb/internal');
+
 module.exports = {
     title: 'Hydra',
     tagline: 'A framework for elegantly configuring complex applications',
@@ -26,7 +28,7 @@ module.exports = {
             "1.0": "https://github.com/facebookresearch/hydra/blob/1.0_branch/",
             current: "https://github.com/facebookresearch/hydra/blob/main/",
         },
-    },    
+    },
     themeConfig: {
         announcementBar: {
             id: 'support_ukraine',
@@ -36,11 +38,9 @@ module.exports = {
             textColor: '#fff',
             isCloseable: false,
         },
-        googleAnalytics: {
-            trackingID: 'UA-149862507-1',
-        },
         algolia: {
-            apiKey: '8e04f3376c4e6e060f9d8d56734fa67b',
+            appId: 'KVTVP1D78C',
+            apiKey: '9585f41bc128c5a99dd9f22827e1e836',
             indexName: 'hydra',
             algoliaOptions: {},
         },
@@ -48,7 +48,7 @@ module.exports = {
         //   id: 'supportus',
         //   content:
         //     '⭐️ If you like Hydra, give it a star on <a target="_blank" rel="noopener noreferrer" href="https://github.com/facebookresearch/hydra">GitHub</a>! ⭐️',
-        // },        
+        // },
 		prism: {
 		  additionalLanguages: ['antlr4'],
 		},
@@ -73,7 +73,7 @@ module.exports = {
                     items: [
                         {
                             label: 'Blog',
-                            to: 'Blog'
+                            to: 'blog'
                         },
                         {
                             label: 'Docs',
@@ -129,13 +129,22 @@ module.exports = {
             {
                 docs: {
                     sidebarPath: require.resolve('./sidebars.js'),
-                    showLastUpdateAuthor: true,
-                    showLastUpdateTime: true,
+                    showLastUpdateAuthor: fbContent({
+                        internal: false,
+                        external: true,
+                    }),
+                    showLastUpdateTime: fbContent({
+                        internal: false,
+                        external: true,
+                    }),
                     editUrl: 'https://github.com/facebookresearch/hydra/edit/main/website/',
                     lastVersion: 'current',
                 },
                 theme: {
                     customCss: require.resolve('./src/css/custom.css'),
+                },
+                googleAnalytics: {
+                    trackingID: 'UA-149862507-1',
                 },
             },
         ],
